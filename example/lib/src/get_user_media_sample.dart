@@ -61,12 +61,13 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
       'audio': false,
       'video': {
         'mandatory': {
-          'minWidth':
-              '640', // Provide your own width, height and frame rate here
+          'minWidth': '640', // Provide your own width, height and frame rate here
           'minHeight': '480',
           'minFrameRate': '30',
         },
         'facingMode': 'user',
+        'processingDelegateClassNames':
+            Platform.isAndroid ? ['com.cloudwebrtc.flutterflutterexample.flutter_webrtc_example.FilterVideoStream'] : ['FilterVideoStream'],
         'optional': [],
       }
     };
@@ -128,9 +129,7 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
     _mediaRecorder = MediaRecorder(albumName: 'FlutterWebRTC');
     setState(() {});
 
-    final videoTrack = _localStream!
-        .getVideoTracks()
-        .firstWhere((track) => track.kind == 'video');
+    final videoTrack = _localStream!.getVideoTracks().firstWhere((track) => track.kind == 'video');
 
     await _mediaRecorder!.start(
       _mediaRecorderFilePath!,
@@ -171,9 +170,7 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
   void _toggleTorch() async {
     if (_localStream == null) throw Exception('Stream is not initialized');
 
-    final videoTrack = _localStream!
-        .getVideoTracks()
-        .firstWhere((track) => track.kind == 'video');
+    final videoTrack = _localStream!.getVideoTracks().firstWhere((track) => track.kind == 'video');
     final has = await videoTrack.hasTorch();
     if (has) {
       print('[TORCH] Current camera supports torch mode');
@@ -190,18 +187,14 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
     // await videoTrack.setZoom(zoomLevel); //Use it after published webrtc_interface 1.1.1
 
     // before the release, use can just call native method directly.
-    final videoTrack = _localStream!
-        .getVideoTracks()
-        .firstWhere((track) => track.kind == 'video');
+    final videoTrack = _localStream!.getVideoTracks().firstWhere((track) => track.kind == 'video');
     await Helper.setZoom(videoTrack, zoomLevel);
   }
 
   void _switchCamera() async {
     if (_localStream == null) throw Exception('Stream is not initialized');
 
-    final videoTrack = _localStream!
-        .getVideoTracks()
-        .firstWhere((track) => track.kind == 'video');
+    final videoTrack = _localStream!.getVideoTracks().firstWhere((track) => track.kind == 'video');
     await Helper.switchCamera(videoTrack);
     setState(() {
       _isFrontCamera = _isFrontCamera;
@@ -211,15 +204,12 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
   void _captureFrame() async {
     if (_localStream == null) throw Exception('Stream is not initialized');
 
-    final videoTrack = _localStream!
-        .getVideoTracks()
-        .firstWhere((track) => track.kind == 'video');
+    final videoTrack = _localStream!.getVideoTracks().firstWhere((track) => track.kind == 'video');
     final frame = await videoTrack.captureFrame();
     await showDialog(
         context: context,
         builder: (context) => AlertDialog(
-              content:
-                  Image.memory(frame.asUint8List(), height: 720, width: 1280),
+              content: Image.memory(frame.asUint8List(), height: 720, width: 1280),
               actions: <Widget>[
                 TextButton(
                   onPressed: Navigator.of(context, rootNavigator: true).pop,
@@ -256,9 +246,7 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
                   onSelected: _selectAudioOutput,
                   itemBuilder: (BuildContext context) {
                     if (_mediaDevicesList != null) {
-                      return _mediaDevicesList!
-                          .where((device) => device.kind == 'audiooutput')
-                          .map((device) {
+                      return _mediaDevicesList!.where((device) => device.kind == 'audiooutput').map((device) {
                         return PopupMenuItem<String>(
                           value: device.deviceId,
                           child: Text(device.label),
@@ -279,8 +267,7 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
             width: MediaQuery.of(context).size.width,
             height: MediaQuery.of(context).size.height,
             decoration: BoxDecoration(color: Colors.black54),
-            child: LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) {
+            child: LayoutBuilder(builder: (BuildContext context, BoxConstraints constraints) {
               return GestureDetector(
                 onScaleStart: (details) {},
                 onScaleUpdate: (details) {
@@ -288,8 +275,7 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
                     setZoom(details.scale);
                   }
                 },
-                onTapDown: (TapDownDetails details) =>
-                    onViewFinderTap(details, constraints),
+                onTapDown: (TapDownDetails details) => onViewFinderTap(details, constraints),
                 child: RTCVideoView(_localRenderer, mirror: false),
               );
             }),
