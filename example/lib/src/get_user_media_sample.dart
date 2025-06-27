@@ -61,9 +61,9 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
       'audio': false,
       'video': {
         'mandatory': {
-          'minWidth': '640', // Provide your own width, height and frame rate here
-          'minHeight': '480',
-          'minFrameRate': '30',
+          'minWidth': '2048', // Provide your own width, height and frame rate here
+          'minHeight': '1080',
+          'minFrameRate': '60',
         },
         'facingMode': 'user',
         'processingDelegateClassNames':
@@ -276,7 +276,7 @@ class _GetUserMediaSampleState extends State<GetUserMediaSample> {
                   }
                 },
                 onTapDown: (TapDownDetails details) => onViewFinderTap(details, constraints),
-                child: RTCVideoView(_localRenderer, mirror: false),
+                child: RTCVideoView(_localRenderer, mirror: true),
               );
             }),
           ));

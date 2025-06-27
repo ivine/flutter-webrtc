@@ -44,5 +44,6 @@ flutter {
 }
 
 dependencies {
+    implementation fileTree(dir: "libs", include: ["*.jar", "*.aar"])
     implementation 'io.github.webrtc-sdk:android:125.6422.03'
 }
