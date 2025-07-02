@@ -360,6 +360,7 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
   NSString* videoDeviceId = nil;
   NSString* facingMode = nil;
   NSArray<AVCaptureDevice*>* captureDevices = [self captureDevices];
+  NSArray<id<ExternalVideoProcessingDelegate>> *processingDelegates = @[];
 
   if ([videoConstraints isKindOfClass:[NSDictionary class]]) {
     // constraints.video.deviceId
@@ -394,7 +395,26 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
             }
           }
         }
+      }  
+    }
+
+    // processing delegate
+    id processingDelegatesClassNames = videoConstraints[@"processingDelegateClassNames"];
+    if (processingDelegatesClassNames && [processingDelegatesClassNames isKindOfClass:[NSArray class]]) {
+      NSMutableArray *pdArray = [NSMutableArray new];
+      for (id item in processingDelegatesClassNames) {
+        if ([item isKindOfClass:[NSString class]]) {
+          NSString *className = item;
+          Class cls = NSClassFromString(className);
+          if (cls && [cls isSubclassOfClass:[NSObject class]]) {
+            id instance = [[cls alloc] init];
+            if ([instance conformsToProtocol:@protocol(ExternalVideoProcessingDelegate)]) {
+              [pdArray addObject:instance];
+            }
+          }
+        }
       }
+      processingDelegates = [NSArray arrayWithArray:pdArray];
     }
 
     if (!videoDevice) {
@@ -487,6 +507,9 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
 #endif
       
     VideoProcessingAdapter *videoProcessingAdapter = [[VideoProcessingAdapter alloc] initWithRTCVideoSource:videoSource];
+    for (id<ExternalVideoProcessingDelegate> item in processingDelegates) {
+      [videoProcessingAdapter addProcessing:item];
+    }
     self.videoCapturer = [[RTCCameraVideoCapturer alloc] initWithDelegate:videoProcessingAdapter];
       
     AVCaptureDeviceFormat* selectedFormat = [self selectFormatForDevice:videoDevice

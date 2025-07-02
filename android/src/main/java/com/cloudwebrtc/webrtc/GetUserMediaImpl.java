@@ -694,15 +694,37 @@ public class GetUserMediaImpl {
     private ConstraintsMap getUserVideo(ConstraintsMap constraints, MediaStream mediaStream) {
         ConstraintsMap videoConstraintsMap = null;
         ConstraintsMap videoConstraintsMandatory = null;
+        List<LocalVideoTrack.ExternalVideoFrameProcessing> processingDelegates = new ArrayList<>();
         if (constraints.getType("video") == ObjectType.Map) {
             videoConstraintsMap = constraints.getMap("video");
             if (videoConstraintsMap.hasKey("mandatory")
                     && videoConstraintsMap.getType("mandatory") == ObjectType.Map) {
                 videoConstraintsMandatory = videoConstraintsMap.getMap("mandatory");
             }
-        }
+            if (videoConstraintsMap.hasKey("processingDelegateClassNames")
+                && videoConstraintsMap.getType("processingDelegateClassNames") == ObjectType.Array) {
 
-        Log.i(TAG, "getUserMedia(video): " + videoConstraintsMap);
+                ConstraintsArray classNamesArray = videoConstraintsMap.getArray("processingDelegateClassNames");
+
+                for (int i = 0; i < classNamesArray.size(); i++) {
+                    String className = classNamesArray.getString(i);
+
+                    try {
+                        Class<?> cls = Class.forName(className);
+                        Object instance = cls.getDeclaredConstructor().newInstance();
+
+                        if (instance instanceof LocalVideoTrack.ExternalVideoFrameProcessing) {
+                            processingDelegates.add((LocalVideoTrack.ExternalVideoFrameProcessing) instance);
+                        } else {
+                            Log.d(TAG, "Class " + className + " does not implement ExternalVideoProcessingDelegate");
+                        }
+                    } catch (Exception e) {
+                        Log.d(TAG, "Failed to instantiate class: " + className);
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
 
         // NOTE: to support Camera2, the device should:
         //   1. Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
@@ -815,7 +837,10 @@ public class GetUserMediaImpl {
 
         LocalVideoTrack localVideoTrack = new LocalVideoTrack(track);
         videoSource.setVideoProcessor(localVideoTrack);
-
+        for (LocalVideoTrack.ExternalVideoFrameProcessing delegate : processingDelegates) {
+            localVideoTrack.addProcessor(delegate);
+            Log.d(TAG, "Added processor: " + delegate.getClass().getName());
+        }
         stateProvider.putLocalTrack(track.id(),localVideoTrack);
 
         ConstraintsMap trackParams = new ConstraintsMap();
