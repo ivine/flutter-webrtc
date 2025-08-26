@@ -1588,10 +1588,81 @@ static FlutterWebRTCPlugin *sharedSingleton;
                                                 details:nil]);
                 }
 #endif
-    } else {
+  } else if ([@"getCameraInfo" isEqualToString:call.method]) {
+    NSString *deviceId = call.arguments[@"deviceId"];
+    [self getCameraInfo:deviceId result:result];
+  } else {
     [self handleFrameCryptorMethodCall:call result:result];
   }
 }
+
+- (void)getCameraInfo:(NSString*)deviceId result:(FlutterResult)result {
+    AVCaptureDevice *device = [self cameraDeviceForUniqueID:deviceId];
+    if (!device) {
+        result([FlutterError errorWithCode:@"getCameraInfo"
+                                   message:@"Camera not found"
+                                   details:nil]);
+        return;
+    }
+
+    // Zoom
+    CGFloat currentZoom = device.videoZoomFactor;
+    CGFloat minZoom = 1.0;
+    CGFloat maxZoom = device.activeFormat.videoMaxZoomFactor;
+    if (maxZoom < minZoom) { maxZoom = minZoom; }
+
+    // 最大帧率
+    CGFloat maxFPS = 30.0;
+    NSArray<AVFrameRateRange *> *ranges = device.activeFormat.videoSupportedFrameRateRanges;
+    for (AVFrameRateRange *range in ranges) {
+        if (range.maxFrameRate > maxFPS) {
+            maxFPS = range.maxFrameRate;
+        }
+    }
+
+    // 返回结果
+    result(@{
+        @"currentZoom": @(currentZoom),
+        @"minZoom": @(minZoom),
+        @"maxZoom": @(maxZoom),
+        @"maxFPS": @(maxFPS)
+    });
+}
+
+
+/// 使用 AVCaptureDeviceDiscoverySession 查找设备，避免使用已废弃 API
+- (AVCaptureDevice *)cameraDeviceForUniqueID:(NSString *)uniqueID {
+    if (@available(iOS 10.0, *)) {
+        AVCaptureDeviceDiscoverySession *session =
+        [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:@[
+            AVCaptureDeviceTypeBuiltInWideAngleCamera,
+            AVCaptureDeviceTypeBuiltInTelephotoCamera,
+            AVCaptureDeviceTypeBuiltInUltraWideCamera,
+            AVCaptureDeviceTypeBuiltInDualCamera,
+            AVCaptureDeviceTypeBuiltInDualWideCamera,
+            AVCaptureDeviceTypeBuiltInTripleCamera,
+            AVCaptureDeviceTypeBuiltInTrueDepthCamera
+        ]
+        mediaType:AVMediaTypeVideo
+        position:AVCaptureDevicePositionUnspecified];
+
+        for (AVCaptureDevice *d in session.devices) {
+            if ([d.uniqueID isEqualToString:uniqueID]) {
+                return d;
+            }
+        }
+        return nil;
+    } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        for (AVCaptureDevice *d in [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo]) {
+            if ([d.uniqueID isEqualToString:uniqueID]) return d;
+        }
+#pragma clang diagnostic pop
+        return nil;
+    }
+}
+
 
 - (void)dealloc {
   [_localTracks removeAllObjects];
