@@ -16,6 +16,11 @@ import android.util.Log;
 import android.util.LongSparseArray;
 import android.view.Surface;
 
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.util.Range;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
@@ -1042,12 +1047,55 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         //Log.d(TAG, "no implementation for 'setLogSeverity'");
         break;
       }
+      case "getCameraInfo": {
+          String deviceId = call.argument("deviceId");
+          getCameraInfo(deviceId, result);
+          break;
+      }
       default:
         if(frameCryptor.handleMethodCall(call, result)) {
           break;
         }
         result.notImplemented();
         break;
+    }
+  }
+
+  private void getCameraInfo(String cameraId, Result result) {
+    CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+    try {
+        CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+
+        // 获取最大数字变焦
+        Float maxZoom = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+        if (maxZoom == null) {
+            maxZoom = 1.0f;
+        }
+
+        float minZoom = 1.0f;
+        float currentZoom = 1.0f;
+
+        // 获取最大帧率
+        Range<Integer>[] ranges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+        int maxFPS = 30;
+        if (ranges != null && ranges.length > 0) {
+            for (Range<Integer> r : ranges) {
+                if (r.getUpper() > maxFPS) {
+                    maxFPS = r.getUpper();
+                }
+            }
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("currentZoom", currentZoom);
+        response.put("minZoom", minZoom);
+        response.put("maxZoom", maxZoom);
+        response.put("maxFPS", maxFPS);
+
+        result.success(response);
+
+    } catch (CameraAccessException e) {
+        result.error("CAMERA_ERROR", "Camera access error: " + e.getMessage(), null);
     }
   }
 
