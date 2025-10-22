@@ -346,5 +346,67 @@
   return fmin(maxSupportedFramerate, targetFps);
 }
 
+- (nullable AVCaptureDeviceFormat*)selectFormatForDevice:(nonnull AVCaptureDevice*)device
+                                        formatIdentifier:(nullable NSString *)formatIdentifier {
+    if (!device || formatIdentifier == nil || formatIdentifier.length == 0) {
+        return nil;
+    }
+
+    NSArray<AVCaptureDeviceFormat *> *formats = device.formats;
+    for (AVCaptureDeviceFormat *format in formats) {
+        NSString *identifier = [self captureDeviceFormatIdentifier:format];
+        if ([identifier isEqualToString:formatIdentifier]) {
+            return format; // ✅ 找到完全匹配
+        }
+    }
+
+    // ⚙️ 容错策略：尝试宽松匹配（仅比较像素格式）
+    NSArray<NSString *> *parts = [formatIdentifier componentsSeparatedByString:@"_"];
+    if (parts.count > 1) {
+        NSString *pixelFormat = parts[0];
+        for (AVCaptureDeviceFormat *format in formats) {
+            FourCharCode code = CMFormatDescriptionGetMediaSubType(format.formatDescription);
+            NSString *pf = [NSString stringWithFormat:@"%c%c%c%c",
+                            (char)((code >> 24) & 0xFF),
+                            (char)((code >> 16) & 0xFF),
+                            (char)((code >> 8) & 0xFF),
+                            (char)(code & 0xFF)];
+            if ([pf isEqualToString:pixelFormat]) {
+                return format; // 返回第一个匹配的同类型像素格式
+            }
+        }
+    }
+
+    return nil;
+}
+
+- (NSString *)captureDeviceFormatIdentifier:(AVCaptureDeviceFormat *)format {
+    if (!format) return @"";
+
+    CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
+    FourCharCode formatCode = CMFormatDescriptionGetMediaSubType(format.formatDescription);
+    Float64 minFrameRate = 0.0;
+    Float64 maxFrameRate = 0.0;
+
+    if (format.videoSupportedFrameRateRanges.count > 0) {
+        AVFrameRateRange *range = format.videoSupportedFrameRateRanges.firstObject;
+        minFrameRate = range.minFrameRate;
+        maxFrameRate = range.maxFrameRate;
+    }
+
+    NSString *pixelFormat = [NSString stringWithFormat:@"%c%c%c%c",
+                             (char)((formatCode >> 24) & 0xFF),
+                             (char)((formatCode >> 16) & 0xFF),
+                             (char)((formatCode >> 8) & 0xFF),
+                             (char)(formatCode & 0xFF)];
+
+    // e.g. "420f_1920x1080_1-60"
+    return [NSString stringWithFormat:@"%@_%dx%d_%.0f-%.0f",
+            pixelFormat,
+            dimensions.width,
+            dimensions.height,
+            minFrameRate,
+            maxFrameRate];
+}
 
 @end

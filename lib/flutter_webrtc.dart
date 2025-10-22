@@ -4,6 +4,7 @@ export 'package:webrtc_interface/webrtc_interface.dart'
     hide MediaDevices, MediaRecorder, Navigator;
 
 export 'src/helper.dart';
+export 'src/camera_helper.dart';
 export 'src/desktop_capturer.dart';
 export 'src/media_devices.dart';
 export 'src/media_recorder.dart';

@@ -1642,6 +1642,9 @@ static FlutterWebRTCPlugin *sharedSingleton;
       NSNumber* value = call.arguments[@"value"];
       adm.voiceProcessingBypassed = value.boolValue;
       result(nil);
+    } else if ([@"getCameraDeviceInfo" isEqualToString:call.method]) {
+      NSString *deviceId = call.arguments[@"deviceId"];
+      [self getCameraDeviceInfo:deviceId result:result];
     } else {
       if([self handleFrameCryptorMethodCall:call result:result]) {
           return;
@@ -1650,6 +1653,87 @@ static FlutterWebRTCPlugin *sharedSingleton;
       }
     }
 }
+
+- (void)getCameraDeviceInfo:(NSString *)deviceId result:(FlutterResult)result {
+    AVCaptureDevice *device = [AVCaptureDevice deviceWithUniqueID:deviceId];
+    if (!device) {
+        result([FlutterError errorWithCode:@"getCameraDeviceInfo"
+                                   message:@"Camera not found"
+                                   details:nil]);
+        return;
+    }
+
+    // === Zoom 信息 ===
+    CGFloat currentZoom = 1.0;
+    CGFloat minZoom = 1.0;
+    CGFloat maxZoom = 1.0;
+#if !TARGET_OS_OSX
+    currentZoom = device.videoZoomFactor;
+    maxZoom = device.activeFormat.videoMaxZoomFactor;
+    if (maxZoom < minZoom) maxZoom = minZoom;
+#endif
+
+    // === 支持的格式信息 ===
+    NSArray<AVCaptureDeviceFormat *> *formats = [RTCCameraVideoCapturer supportedFormatsForDevice:device];
+    NSMutableArray *deviceFormats = [NSMutableArray arrayWithCapacity:formats.count];
+
+    for (AVCaptureDeviceFormat *format in formats) {
+        CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
+
+        // 计算最大帧率
+        Float64 maxFrameRate = 0.0;
+        Float64 minFrameRate = 0.0;
+        if (format.videoSupportedFrameRateRanges.count > 0) {
+            minFrameRate = format.videoSupportedFrameRateRanges.firstObject.minFrameRate;
+            for (AVFrameRateRange *range in format.videoSupportedFrameRateRanges) {
+                if (range.maxFrameRate > maxFrameRate) {
+                    maxFrameRate = range.maxFrameRate;
+                }
+            }
+        }
+
+        // 像素格式
+        FourCharCode formatCode = CMFormatDescriptionGetMediaSubType(format.formatDescription);
+        NSString *pixelFormatType = [NSString stringWithFormat:@"%c%c%c%c",
+                                     (char)((formatCode >> 24) & 0xFF),
+                                     (char)((formatCode >> 16) & 0xFF),
+                                     (char)((formatCode >> 8) & 0xFF),
+                                     (char)(formatCode & 0xFF)];
+
+        // 可支持的最大 zoom
+        CGFloat videoMaxZoomFactor = 1.0;
+#if !TARGET_OS_OSX
+        videoMaxZoomFactor = format.videoMaxZoomFactor;
+#endif
+
+        NSDictionary *formatInfo = @{
+            @"id": [self captureDeviceFormatIdentifier:format],
+            @"width": @(dimensions.width),
+            @"height": @(dimensions.height),
+            @"minFrameRate": @(minFrameRate),
+            @"maxFrameRate": @(maxFrameRate),
+            @"videoMaxZoomFactor": @(videoMaxZoomFactor),
+            @"mediaSubType": pixelFormatType ?: @"unknown"
+        };
+
+        [deviceFormats addObject:formatInfo];
+    }
+
+    // === 返回结构 ===
+    NSDictionary *resultDict = @{
+        @"activeFormat": @{
+            @"zoom": @{
+                @"currentZoom": @(currentZoom),
+                @"minZoom": @(minZoom),
+                @"maxZoom": @(maxZoom)
+            }
+        },
+        @"deviceFormats": deviceFormats
+    };
+
+    result(resultDict);
+}
+
 
 - (void)dealloc {
   [_localTracks removeAllObjects];

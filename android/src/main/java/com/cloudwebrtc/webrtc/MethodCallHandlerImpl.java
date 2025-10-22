@@ -18,6 +18,11 @@ import android.util.Log;
 import android.util.LongSparseArray;
 import android.view.Surface;
 
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.util.Range;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
@@ -1071,6 +1076,11 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         //Log.d(TAG, "no implementation for 'setLogSeverity'");
         break;
       }
+      case "getCameraDeviceInfo": {
+          String deviceId = call.argument("deviceId");
+          getCameraDeviceInfo(deviceId, result);
+          break;
+      }
       default:
         if(frameCryptor.handleMethodCall(call, result)) {
           break;
@@ -1081,6 +1091,102 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         break;
     }
   }
+
+  private void getCameraDeviceInfo(String cameraId, Result result) {
+      CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+      try {
+          CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+
+          // ===== Zoom 信息 =====
+          Float maxZoom = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+          if (maxZoom == null || maxZoom < 1.0f) {
+              maxZoom = 1.0f;
+          }
+          float minZoom = 1.0f;
+          float currentZoom = 1.0f;
+
+          // ===== 支持的格式与尺寸 =====
+          StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+          List<Map<String, Object>> deviceFormats = new ArrayList<>();
+
+          if (map != null) {
+              // 支持的输出格式
+              int[] outputFormats = map.getOutputFormats();
+              for (int format : outputFormats) {
+                  Size[] sizes = map.getOutputSizes(format);
+                  if (sizes == null) continue;
+
+                  // 获取帧率范围
+                  Range<Integer>[] fpsRanges = characteristics.get(
+                          CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+
+                  int minFps = 0;
+                  int maxFps = 0;
+                  if (fpsRanges != null && fpsRanges.length > 0) {
+                      for (Range<Integer> r : fpsRanges) {
+                          if (r.getUpper() > maxFps) {
+                              maxFps = r.getUpper();
+                              minFps = r.getLower();
+                          }
+                      }
+                  }
+
+                  String formatName;
+                  switch (format) {
+                      case ImageFormat.YUV_420_888:
+                          formatName = "YUV_420_888";
+                          break;
+                      case ImageFormat.JPEG:
+                          formatName = "JPEG";
+                          break;
+                      case ImageFormat.RAW_SENSOR:
+                          formatName = "RAW_SENSOR";
+                          break;
+                      case ImageFormat.PRIVATE:
+                          formatName = "PRIVATE";
+                          break;
+                      case ImageFormat.HEIC:
+                          formatName = "HEIC";
+                          break;
+                      default:
+                          formatName = "OTHER_" + format;
+                          break;
+                  }
+
+                  // 每个尺寸加入列表
+                  for (Size s : sizes) {
+                      Map<String, Object> formatInfo = new HashMap<>();
+                      formatInfo.put("width", s.getWidth());
+                      formatInfo.put("height", s.getHeight());
+                      formatInfo.put("minFrameRate", minFps);
+                      formatInfo.put("maxFrameRate", maxFps);
+                      formatInfo.put("videoMaxZoomFactor", maxZoom);
+                      formatInfo.put("mediaSubType", formatName);
+                      deviceFormats.add(formatInfo);
+                  }
+              }
+          }
+
+          // ===== 返回结构 =====
+          Map<String, Object> zoomInfo = new HashMap<>();
+          zoomInfo.put("currentZoom", currentZoom);
+          zoomInfo.put("minZoom", minZoom);
+          zoomInfo.put("maxZoom", maxZoom);
+
+          Map<String, Object> activeFormat = new HashMap<>();
+          activeFormat.put("zoom", zoomInfo);
+
+          Map<String, Object> response = new HashMap<>();
+          response.put("activeFormat", activeFormat);
+          response.put("deviceFormats", deviceFormats);
+
+          result.success(response);
+
+      } catch (CameraAccessException e) {
+          result.error("CAMERA_ERROR", "Camera access error: " + e.getMessage(), null);
+      }
+  }
+
 
   private ConstraintsMap capabilitiestoMap(RtpCapabilities capabilities) {
     ConstraintsMap capabilitiesMap = new ConstraintsMap();

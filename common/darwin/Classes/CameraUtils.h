@@ -39,5 +39,9 @@
 
 - (nullable AVCaptureDevice*)findDeviceForPosition:(AVCaptureDevicePosition)position;
 
+- (nullable AVCaptureDeviceFormat*)selectFormatForDevice:(nonnull AVCaptureDevice*)device
+                                        formatIdentifier:(nullable NSString *)formatIdentifier;
+
+- (NSString *_Nonnull)captureDeviceFormatIdentifier:(AVCaptureDeviceFormat *_Nonnull)format;
 
 @end
