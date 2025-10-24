@@ -351,62 +351,192 @@
     if (!device || formatIdentifier == nil || formatIdentifier.length == 0) {
         return nil;
     }
-
     NSArray<AVCaptureDeviceFormat *> *formats = device.formats;
     for (AVCaptureDeviceFormat *format in formats) {
-        NSString *identifier = [self captureDeviceFormatIdentifier:format];
+        NSString *identifier = [format xn_stableID];
         if ([identifier isEqualToString:formatIdentifier]) {
             return format; // ✅ 找到完全匹配
         }
     }
-
-    // ⚙️ 容错策略：尝试宽松匹配（仅比较像素格式）
-    NSArray<NSString *> *parts = [formatIdentifier componentsSeparatedByString:@"_"];
-    if (parts.count > 1) {
-        NSString *pixelFormat = parts[0];
-        for (AVCaptureDeviceFormat *format in formats) {
-            FourCharCode code = CMFormatDescriptionGetMediaSubType(format.formatDescription);
-            NSString *pf = [NSString stringWithFormat:@"%c%c%c%c",
-                            (char)((code >> 24) & 0xFF),
-                            (char)((code >> 16) & 0xFF),
-                            (char)((code >> 8) & 0xFF),
-                            (char)(code & 0xFF)];
-            if ([pf isEqualToString:pixelFormat]) {
-                return format; // 返回第一个匹配的同类型像素格式
-            }
-        }
-    }
-
     return nil;
 }
 
-- (NSString *)captureDeviceFormatIdentifier:(AVCaptureDeviceFormat *)format {
-    if (!format) return @"";
+@end
 
-    CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription);
-    FourCharCode formatCode = CMFormatDescriptionGetMediaSubType(format.formatDescription);
-    Float64 minFrameRate = 0.0;
-    Float64 maxFrameRate = 0.0;
 
-    if (format.videoSupportedFrameRateRanges.count > 0) {
-        AVFrameRateRange *range = format.videoSupportedFrameRateRanges.firstObject;
-        minFrameRate = range.minFrameRate;
-        maxFrameRate = range.maxFrameRate;
-    }
+@implementation AVCaptureDeviceFormat (UniqueID)
 
+- (NSString *)xn_stableID {
+    CMVideoDimensions dims = CMVideoFormatDescriptionGetDimensions(self.formatDescription);
+    FourCharCode mediaSubType = CMFormatDescriptionGetMediaSubType(self.formatDescription);
+    
+    NSMutableString *identifier = [NSMutableString string];
+    
+    // 分辨率
+    [identifier appendFormat:@"%dx%d", dims.width, dims.height];
+    
+    // 像素格式
     NSString *pixelFormat = [NSString stringWithFormat:@"%c%c%c%c",
-                             (char)((formatCode >> 24) & 0xFF),
-                             (char)((formatCode >> 16) & 0xFF),
-                             (char)((formatCode >> 8) & 0xFF),
-                             (char)(formatCode & 0xFF)];
+                             (char)((mediaSubType >> 24) & 0xFF),
+                             (char)((mediaSubType >> 16) & 0xFF),
+                             (char)((mediaSubType >> 8) & 0xFF),
+                             (char)(mediaSubType & 0xFF)];
+    [identifier appendFormat:@"_%@", pixelFormat];
+    
+    // 帧率范围
+    for (AVFrameRateRange *range in self.videoSupportedFrameRateRanges) {
+        [identifier appendFormat:@"_%.2f-%.2f", range.minFrameRate, range.maxFrameRate];
+    }
+    
+    // 视场角
+    [identifier appendFormat:@"_fov%.2f", self.videoFieldOfView];
+    
+    // 最大缩放
+    [identifier appendFormat:@"_zoom%.2f", self.videoMaxZoomFactor];
+    
+    return identifier;
+}
 
-    // e.g. "420f_1920x1080_1-60"
-    return [NSString stringWithFormat:@"%@_%dx%d_%.0f-%.0f",
-            pixelFormat,
-            dimensions.width,
-            dimensions.height,
-            minFrameRate,
-            maxFrameRate];
+- (void)xn_printFormatInfo {
+    NSLog(@"\n========== Format Info ==========");
+    NSLog(@"%@", [self xn_detailedDescription]);
+    NSLog(@"=================================\n");
+}
+
+- (NSString *)xn_detailedDescription {
+    NSMutableString *description = [NSMutableString string];
+    
+    // 基本信息
+    CMVideoDimensions dims = CMVideoFormatDescriptionGetDimensions(self.formatDescription);
+    [description appendFormat:@"分辨率: %dx%d\n", dims.width, dims.height];
+    
+    // 像素格式
+    FourCharCode mediaSubType = CMFormatDescriptionGetMediaSubType(self.formatDescription);
+    NSString *pixelFormat = [self xn_pixelFormat];
+    [description appendFormat:@"像素格式: %@ (%u)\n", pixelFormat, mediaSubType];
+    
+    // 帧率范围
+    [description appendString:@"帧率范围:\n"];
+    for (AVFrameRateRange *range in self.videoSupportedFrameRateRanges) {
+        [description appendFormat:@"  %.2f - %.2f fps\n",
+         range.minFrameRate, range.maxFrameRate];
+    }
+    
+    // 视场角
+    [description appendFormat:@"视场角: %.2f°\n", self.videoFieldOfView];
+    
+    // 缩放
+    [description appendFormat:@"最大缩放: %.2fx\n", self.videoMaxZoomFactor];
+    
+    // 视频稳定支持 (仅 iOS/tvOS)
+#if TARGET_OS_IOS || TARGET_OS_TV
+    [description appendString:@"视频稳定支持:\n"];
+    if ([self isVideoStabilizationModeSupported:AVCaptureVideoStabilizationModeOff]) {
+        [description appendString:@"  ✓ Off\n"];
+    }
+    if ([self isVideoStabilizationModeSupported:AVCaptureVideoStabilizationModeStandard]) {
+        [description appendString:@"  ✓ Standard\n"];
+    }
+    if ([self isVideoStabilizationModeSupported:AVCaptureVideoStabilizationModeCinematic]) {
+        [description appendString:@"  ✓ Cinematic\n"];
+    }
+    if (@available(iOS 13.0, tvOS 17.0, *)) {
+        if ([self isVideoStabilizationModeSupported:AVCaptureVideoStabilizationModeCinematicExtended]) {
+            [description appendString:@"  ✓ Cinematic Extended\n"];
+        }
+    }
+    if (@available(iOS 17.0, tvOS 17.0, *)) {
+        if ([self isVideoStabilizationModeSupported:AVCaptureVideoStabilizationModePreviewOptimized]) {
+            [description appendString:@"  ✓ Preview Optimized\n"];
+        }
+    }
+#endif
+    
+    // HDR 支持
+    if (@available(iOS 14.0, macOS 12.0, tvOS 17.0, *)) {
+        [description appendFormat:@"支持 HDR: %@\n",
+         self.isVideoHDRSupported ? @"是" : @"否"];
+    }
+    
+    // 深度数据缩放范围 (iOS 17.2+)
+    if (@available(iOS 17.2, macOS 14.2, tvOS 17.2, *)) {
+        NSArray<AVZoomRange *> *zoomRanges = self.supportedVideoZoomRangesForDepthDataDelivery;
+        if (zoomRanges.count > 0) {
+            [description appendString:@"支持的深度数据缩放范围:\n"];
+            for (AVZoomRange *range in zoomRanges) {
+                [description appendFormat:@"  • %.2fx - %.2fx\n",
+                 range.minZoomFactor, range.maxZoomFactor];
+            }
+        } else {
+            [description appendString:@"支持的深度数据缩放范围: 无\n"];
+        }
+    }
+    
+    // 高分辨率照片 (仅 iOS)
+#if TARGET_OS_IOS
+    if (@available(iOS 15.0, *)) {
+        CMVideoDimensions highResDims = self.highResolutionStillImageDimensions;
+        if (highResDims.width > 0 && highResDims.height > 0) {
+            [description appendFormat:@"高分辨率照片: %dx%d\n",
+             highResDims.width, highResDims.height];
+        }
+    }
+#endif
+    
+    // 支持的色彩空间
+    if (@available(iOS 14.0, macOS 12.0, tvOS 17.0, *)) {
+        if (self.supportedColorSpaces.count > 0) {
+            [description appendString:@"支持的色彩空间:\n"];
+            for (NSNumber *colorSpace in self.supportedColorSpaces) {
+                AVCaptureColorSpace space = (AVCaptureColorSpace)[colorSpace integerValue];
+                NSString *spaceName = @"Unknown";
+                switch (space) {
+                    case AVCaptureColorSpace_sRGB:
+                        spaceName = @"sRGB";
+                        break;
+                    case AVCaptureColorSpace_P3_D65:
+                        spaceName = @"P3-D65";
+                        break;
+#if TARGET_OS_IOS || TARGET_OS_TV
+                    case AVCaptureColorSpace_HLG_BT2020:
+                        spaceName = @"HLG BT2020";
+                        break;
+#endif
+#if TARGET_OS_IOS
+                    case AVCaptureColorSpace_AppleLog:
+                        spaceName = @"Apple Log";
+                        break;
+#endif
+                }
+                [description appendFormat:@"  • %@\n", spaceName];
+            }
+        }
+    }
+    
+    // macOS 特有信息
+#if TARGET_OS_OSX
+    // 可以添加 macOS 特有的格式信息
+    [description appendFormat:@"平台: macOS\n"];
+#elif TARGET_OS_IOS
+    [description appendFormat:@"平台: iOS\n"];
+#elif TARGET_OS_TV
+    [description appendFormat:@"平台: tvOS\n"];
+#endif
+    
+    // 唯一 ID
+    [description appendFormat:@"Stable ID: %@\n", [self xn_stableID]];
+    
+    return description;
+}
+
+- (NSString *)xn_pixelFormat {
+    FourCharCode mediaSubType = CMFormatDescriptionGetMediaSubType(self.formatDescription);
+    NSString *pixelFormat = [NSString stringWithFormat:@"%c%c%c%c",
+                                 (char)((mediaSubType >> 24) & 0xFF),
+                                 (char)((mediaSubType >> 16) & 0xFF),
+                                 (char)((mediaSubType >> 8) & 0xFF),
+                                 (char)(mediaSubType & 0xFF)];
+    return pixelFormat;
 }
 
 @end

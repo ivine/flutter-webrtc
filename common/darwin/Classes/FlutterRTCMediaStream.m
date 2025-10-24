@@ -537,17 +537,6 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
     
     NSLog(@"target format %ldx%ld, targetFps: %ld, selected format: %ldx%ld, selected fps %ld", targetWidth, targetHeight, targetFps, selectedWidth, selectedHeight, selectedFps);
 
-    if ([videoDevice lockForConfiguration:NULL]) {
-      @try {
-        videoDevice.activeFormat = selectedFormat;
-        videoDevice.activeVideoMaxFrameDuration = CMTimeMake(1, (int32_t)selectedFps);
-        videoDevice.activeVideoMinFrameDuration = CMTimeMake(1, (int32_t)selectedFps);
-      } @catch (NSException* exception) {
-        NSLog(@"Failed to set active frame rate!\n User info:%@", exception.userInfo);
-      }
-      [videoDevice unlockForConfiguration];
-    }
-
     [self.videoCapturer startCaptureWithDevice:videoDevice
                                         format:selectedFormat
                                            fps:selectedFps
@@ -556,6 +545,17 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
                                  NSLog(@"Start capture error: %@", [error localizedDescription]);
                                }
                              }];
+      
+    if ([videoDevice lockForConfiguration:NULL]) {
+      @try {
+//        videoDevice.activeFormat = selectedFormat;
+        videoDevice.activeVideoMaxFrameDuration = CMTimeMake(1, (int32_t)selectedFps);
+        videoDevice.activeVideoMinFrameDuration = CMTimeMake(1, (int32_t)selectedFps);
+      } @catch (NSException* exception) {
+        NSLog(@"Failed to set active frame rate!\n User info:%@", exception.userInfo);
+      }
+      [videoDevice unlockForConfiguration];
+    }
 
     NSString* trackUUID = [[NSUUID UUID] UUIDString];
     RTCVideoTrack* videoTrack = [self.peerConnectionFactory videoTrackWithSource:videoSource
@@ -1015,46 +1015,12 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
 
 - (NSInteger)selectFpsForFormat:(AVCaptureDeviceFormat*)format targetFps:(NSInteger)targetFps {
   Float64 maxSupportedFramerate = 0;
+    [format xn_printFormatInfo];
   for (AVFrameRateRange* fpsRange in format.videoSupportedFrameRateRanges) {
-    maxSupportedFramerate = fmax(maxSupportedFramerate, fpsRange.maxFrameRate);
+    Float64 maxFrameRate = fpsRange.maxFrameRate;
+    maxSupportedFramerate = fmax(maxSupportedFramerate, maxFrameRate);
   }
   return fmin(maxSupportedFramerate, targetFps);
-}
-
-- (void)printFormat:(AVCaptureDeviceFormat *)format {
-    if (!format) return;
-
-    CMFormatDescriptionRef desc = format.formatDescription;
-    CMVideoDimensions dims = CMVideoFormatDescriptionGetDimensions(desc);
-    FourCharCode pixelFormat = CMFormatDescriptionGetMediaSubType(desc);
-
-    // 分辨率 + 像素格式
-    NSLog(@"\nFormat: %4.4s (%dx%d)", (char *)&pixelFormat, dims.width, dims.height);
-
-    // 帧率范围
-    for (AVFrameRateRange *range in format.videoSupportedFrameRateRanges) {
-        NSLog(@"   fps range: %.2f - %.2f", range.minFrameRate, range.maxFrameRate);
-    }
-
-#if TARGET_OS_IPHONE
-    // 是否支持多摄
-    if (@available(iOS 13.0, *)) {
-        NSLog(@"   MultiCam: %@", format.isMultiCamSupported ? @"YES" : @"NO");
-    }
-#endif
-
-    // 最大变焦倍率
-    NSLog(@"   max Zoom factor: %.2f", format.videoMaxZoomFactor);
-
-    NSLog(@"--------------------------------------------");
-}
-
-- (void)printDeviceFormats:(AVCaptureDevice *)device {
-    NSLog(@"=== Device: %@ ===", device.localizedName);
-
-    for (AVCaptureDeviceFormat *format in device.formats) {
-        [self printFormat:format];
-    }
 }
 
 @end

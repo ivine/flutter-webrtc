@@ -1669,7 +1669,8 @@ static FlutterWebRTCPlugin *sharedSingleton;
     CGFloat maxZoom = 1.0;
 #if !TARGET_OS_OSX
     currentZoom = device.videoZoomFactor;
-    maxZoom = device.activeFormat.videoMaxZoomFactor;
+    minZoom = device.minAvailableVideoZoomFactor;
+    maxZoom = device.maxAvailableVideoZoomFactor;
     if (maxZoom < minZoom) maxZoom = minZoom;
 #endif
 
@@ -1694,11 +1695,7 @@ static FlutterWebRTCPlugin *sharedSingleton;
 
         // 像素格式
         FourCharCode formatCode = CMFormatDescriptionGetMediaSubType(format.formatDescription);
-        NSString *pixelFormatType = [NSString stringWithFormat:@"%c%c%c%c",
-                                     (char)((formatCode >> 24) & 0xFF),
-                                     (char)((formatCode >> 16) & 0xFF),
-                                     (char)((formatCode >> 8) & 0xFF),
-                                     (char)(formatCode & 0xFF)];
+        NSString *pixelFormat = [format xn_pixelFormat];
 
         // 可支持的最大 zoom
         CGFloat videoMaxZoomFactor = 1.0;
@@ -1707,13 +1704,14 @@ static FlutterWebRTCPlugin *sharedSingleton;
 #endif
 
         NSDictionary *formatInfo = @{
-            @"id": [self captureDeviceFormatIdentifier:format],
+            @"id": [format xn_stableID],
             @"width": @(dimensions.width),
             @"height": @(dimensions.height),
             @"minFrameRate": @(minFrameRate),
             @"maxFrameRate": @(maxFrameRate),
             @"videoMaxZoomFactor": @(videoMaxZoomFactor),
-            @"mediaSubType": pixelFormatType ?: @"unknown"
+            @"pixelFormat": pixelFormat,
+            @"mediaSubType": [NSString stringWithFormat:@"%u", formatCode],
         };
 
         [deviceFormats addObject:formatInfo];

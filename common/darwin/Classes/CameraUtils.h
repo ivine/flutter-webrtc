@@ -1,3 +1,4 @@
+#import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
 #import "FlutterWebRTCPlugin.h"
 
@@ -42,6 +43,25 @@
 - (nullable AVCaptureDeviceFormat*)selectFormatForDevice:(nonnull AVCaptureDevice*)device
                                         formatIdentifier:(nullable NSString *)formatIdentifier;
 
-- (NSString *_Nonnull)captureDeviceFormatIdentifier:(AVCaptureDeviceFormat *_Nonnull)format;
+@end
+
+
+
+NS_ASSUME_NONNULL_BEGIN
+
+@interface AVCaptureDeviceFormat (UniqueID)
+
+/// 获取格式的稳定唯一标识符
+- (NSString *)xn_stableID;
+
+/// 打印格式的详细信息
+- (void)xn_printFormatInfo;
+
+/// 获取格式的详细描述字符串
+- (NSString *)xn_detailedDescription;
+
+- (NSString *)xn_pixelFormat;
 
 @end
+
+NS_ASSUME_NONNULL_END
